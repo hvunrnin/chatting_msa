@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>채팅 로그인</title>
+</head>
+<body>
+<h2>채팅 로그인</h2>
+
+<div>
+  <label for="userId">유저 ID:</label>
+  <input type="text" id="userId" placeholder="유저 ID 입력">
+  <button onclick="login()">로그인</button>
+</div>
+
+<script>
+  function login() {
+    const userId = document.getElementById("userId").value;
+
+    if (!userId) {
+      alert("유저 ID를 입력해주세요.");
+      return;
+    }
+
+    fetch(`/api/user/login?userId=${encodeURIComponent(userId)}`, {
+      method: "POST"
+    })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error("로그인 실패");
+              }
+              return response.json();
+            })
+            .then(data => {
+              // 성공 시 로컬스토리지에 유저 정보 저장
+              localStorage.setItem("userId", data.userId);
+              alert(`환영합니다 ${data.userId}님!`);
+
+              // 채팅방 목록 화면으로 이동
+              window.location.href = "/chat-room";
+            })
+            .catch(error => {
+              console.error(error);
+              alert("로그인 중 오류가 발생했습니다.");
+            });
+  }
+</script>
+
+</body>
+</html>

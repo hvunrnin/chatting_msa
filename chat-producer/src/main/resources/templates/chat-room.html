@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>채팅방 목록</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <style>
+        /* 개선된 채팅방 UI 스타일 */
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+
+        #roomList {
+            width: 25%;
+            padding: 1rem;
+            border-right: 1px solid #ddd;
+            background-color: #ffffff;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            overflow-y: auto;
+        }
+
+        #chatArea {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+        }
+
+        #instanceInfo {
+            padding: 1rem;
+            background-color: #eef1f5;
+            border-bottom: 1px solid #ddd;
+            font-size: 0.95rem;
+            color: #666;
+        }
+
+        #chatBox {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            background-color: #f9f9fb;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        #inputArea {
+            display: flex;
+            padding: 1rem;
+            border-top: 1px solid #ddd;
+            background-color: #f5f7fa;
+        }
+
+        #inputArea input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            margin-right: 0.5rem;
+        }
+
+        #inputArea button {
+            padding: 0.6rem 1rem;
+            font-size: 1rem;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #inputArea button:hover {
+            background-color: #357ABD;
+        }
+
+        .room {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            padding: 0.6rem 0.8rem;
+            border-radius: 6px;
+            background-color: #f1f3f5;
+            transition: background-color 0.2s;
+            font-size: 0.95rem;
+        }
+
+        .room:hover {
+            background-color: #e2e6ea;
+        }
+
+        .room button {
+            background-color: #c38ed9;
+            color: white;
+            border: none;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .room button:hover {
+            background-color: #b17ec6;
+        }
+
+        #roomIdInput {
+            width: 100%;
+            padding: 0.5rem 0.8rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            margin-bottom: 0.5rem;
+            box-sizing: border-box;
+        }
+
+        #roomList button {
+            width: 30%;
+            background-color: #c38ed9;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        #roomList button:hover {
+            background-color: #b17ec6;
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- 채팅방 목록 -->
+<div id="roomList">
+    <h3>채팅방 목록</h3>
+    <ul id="rooms"></ul>
+
+    <div style="margin-top: 2rem; display: flex; gap: 0.5rem;">
+        <input type="text" id="roomIdInput" placeholder="참여할 채팅방 ID 입력">
+        <button onclick="enterRoom()">입장</button>
+    </div>
+</div>
+
+<!-- 채팅 UI -->
+<div id="chatArea">
+    <div id="instanceInfo">인스턴스 정보: 불러오는 중...</div>
+    <div id="chatBox"></div>
+    <div id="inputArea">
+        <input id="chatInput" placeholder="메시지를 입력하세요">
+        <button onclick="sendMessage()">보내기</button>
+    </div>
+</div>
+
+<script>
+    const userId = localStorage.getItem("userId");
+    if (!userId) {
+        alert("로그인 정보가 없습니다. 로그인 페이지로 이동합니다.");
+        window.location.href = "/login";
+    }
+
+    const roomsEl = document.getElementById("rooms");
+    const chatBox = document.getElementById("chatBox");
+    let stompClient = null;
+    let currentRoomId = null;
+
+    // 인스턴스 ID 불러오기
+    function showInstanceId() {
+        fetch('/instance-id')
+            .then(res => res.text())
+            .then(id => {
+                const el = document.getElementById("instanceInfo");
+                el.textContent = `현재 연결된 서버 인스턴스: ${id}`;
+            })
+            .catch(() => {
+                document.getElementById("instanceInfo").textContent = "인스턴스 정보 불러오기 실패";
+            });
+    }
+
+    // 채팅방 목록 불러오기
+    function reloadRoomList() {
+        roomsEl.innerHTML = "";
+        fetch(`/api/room/list?userId=${userId}`)
+            .then(res => res.json())
+            .then(rooms => {
+                rooms.forEach(room => {
+                    const li = document.createElement("li");
+                    li.className = "room";
+
+                    const roomText = document.createElement("span");
+                    roomText.textContent = `[${room.roomId}] ${room.name}`;
+                    roomText.style.marginRight = "10px";
+                    roomText.style.cursor = "pointer";
+                    roomText.onclick = () => loadRoom(room.roomId);
+
+                    const leaveBtn = document.createElement("button");
+                    leaveBtn.textContent = "나가기";
+                    leaveBtn.onclick = () => leaveRoom(room.roomId);
+
+                    li.appendChild(roomText);
+                    li.appendChild(leaveBtn);
+                    roomsEl.appendChild(li);
+                });
+            });
+    }
+
+    showInstanceId();
+    reloadRoomList();
+
+    function enterRoom() {
+        const roomId = document.getElementById("roomIdInput").value;
+        if (!roomId) {
+            alert("방 ID를 입력해주세요!");
+            return;
+        }
+
+        fetch(`/api/room/join-or-create?roomId=${roomId}&userId=${userId}`, {
+            method: 'POST'
+        })
+            .then(response => {
+                if (response.ok) {
+                    reloadRoomList();
+                    loadRoom(roomId);
+                } else {
+                    alert("채팅방 입장 또는 생성에 실패했습니다.");
+                }
+            });
+    }
+
+    function leaveRoom(roomId) {
+        if (!confirm(`[${roomId}] 채팅방에서 나가시겠습니까?`)) return;
+
+        // 퇴장 메시지 전송
+        if (stompClient && stompClient.connected) {
+            stompClient.send(`/pub/chat/leaveUser/${roomId}`, {}, JSON.stringify({
+                sender: userId
+            }));
+        }
+
+        fetch(`/api/room/leave?roomId=${roomId}&userId=${userId}`, {
+            method: 'DELETE'
+        }).then(res => {
+            if (res.ok) {
+                alert(`[${roomId}] 방에서 나갔습니다.`);
+                if (roomId === currentRoomId) {
+                    chatBox.innerHTML = "";
+                    if (stompClient) stompClient.disconnect(); // 이걸 나중에 하자
+                    currentRoomId = null;
+                }
+                reloadRoomList();
+            } else {
+                alert("나가기 실패");
+            }
+        });
+    }
+
+
+
+    function loadRoom(roomId) {
+        currentRoomId = roomId;
+        chatBox.innerHTML = "";
+
+        // 연결 끊고 새로 연결
+        if (stompClient) {
+            stompClient.disconnect();
+        }
+
+        const socket = new SockJS('/ws-stomp');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, () => {
+
+            // 메시지 구독
+            stompClient.subscribe(`/sub/chat/room/${roomId}`, (message) => {
+                const msg = JSON.parse(message.body);
+                appendMessage(msg.sender, msg.message, msg.timestamp);
+            });
+
+            // 채팅방 목록 갱신 구독 (서버에서 최초 입장 시 알림 보내줌)
+            stompClient.subscribe(`/sub/user/${userId}/room-refresh`, () => {
+                reloadRoomList();
+            });
+
+            //  입장 알림을 위한 별도 addUser 메시지 전송
+            stompClient.send(`/pub/chat/addUser/${roomId}`, {}, JSON.stringify({
+                sender: userId
+            }));
+
+        });
+
+        // 이전 메시지 불러오기
+        fetch(`/api/message/history?roomId=${roomId}`)
+            .then(res => res.json())
+            .then(messages => {
+                messages.forEach(msg => {
+                    appendMessage(msg.sender, msg.message, msg.timestamp);
+                });
+            });
+    }
+
+    function sendMessage() {
+        const input = document.getElementById("chatInput");
+        const msg = input.value;
+        if (!msg || !stompClient || !stompClient.connected) return;
+
+        stompClient.send("/pub/chat/message", {}, JSON.stringify({
+            messageType: "TALK",
+            roomId: currentRoomId,
+            sender: userId,
+            message: msg
+        }));
+        input.value = "";
+    }
+
+    function appendMessage(sender, message, timestamp = null) {
+        const div = document.createElement("div");
+
+        let timeStr = "";
+        if (timestamp) {
+            const date = new Date(timestamp);
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            timeStr = ` (${year}-${month}-${day} ${hours}:${minutes})`;
+        }
+
+        // "입장하셨습니다." 메시지인지 확인
+        if (message.includes("입장하셨습니다.") || message.includes("퇴장하셨습니다.")) {
+            div.style.fontStyle = "italic";
+            div.style.color = "gray";
+        }
+
+        div.textContent = `[${sender}] ${message}${timeStr}`;
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+
+
+</script>
+
+</body>
+</html>

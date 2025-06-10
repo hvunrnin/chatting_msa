@@ -1,0 +1,56 @@
+services:
+  chat-producer-1:
+    build: ./chat-producer
+    container_name: chat-producer-1
+    ports:
+      - "8091:8090" 
+    environment:
+      - INSTANCE_ID=producer-1
+    networks:
+      - chatnet
+
+  chat-producer-2:
+    build: ./chat-producer
+    container_name: chat-producer-2
+    ports:
+      - "8092:8090"
+    environment:
+      - INSTANCE_ID=producer-2
+    networks:
+      - chatnet
+
+  chat-producer-3:
+    build: ./chat-producer
+    container_name: chat-producer-3
+    ports:
+      - "8093:8090"
+    environment:
+      - INSTANCE_ID=producer-3
+    networks:
+      - chatnet
+
+  chat-consumer:
+    build: ./chat-consumer
+    container_name: chat-consumer
+    ports:
+      - "8094:8091"
+    networks:
+      - chatnet
+
+  nginx:
+    image: nginx:latest
+    container_name: local-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - chat-producer-1
+      - chat-producer-2
+      - chat-producer-3
+      - chat-consumer
+    networks:
+      - chatnet
+
+networks:
+  chatnet:
