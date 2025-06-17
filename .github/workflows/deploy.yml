@@ -78,22 +78,16 @@ jobs:
           command_timeout: 120s
 
       # 9. application-aws.yml 업로드 (분리된 내용)
-      - name: Upload application-aws.yml for each service
+      - name: Upload application.yml for each service
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            cat << 'EOF' > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application-aws.yml
-            ${{ secrets.APPLICATION_AWS_YML_PRODUCER }}
-            EOF
-            
-            cat << 'EOF' > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application-aws.yml
-            ${{ secrets.APPLICATION_AWS_YML_CONSUMER }}
-            EOF
-      
-            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application-aws.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER_B64 }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER_B64 }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
+            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
 
 
       # 10. EC2에서 Docker 재시작
