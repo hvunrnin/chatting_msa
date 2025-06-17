@@ -53,6 +53,17 @@ jobs:
           cp -r chat-producer deploy-files/
           cp -r chat-consumer deploy-files/
 
+      - name: Test SSH connection (debug)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "✅ SSH 접속 성공"
+            hostname
+            whoami
+
       # 7. EC2에 파일 복사
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
