@@ -65,19 +65,7 @@ jobs:
             hostname
             whoami
 
-      # 8. application-aws.yml 업로드 (분리된 내용)
-      - name: Upload application.yml for each service
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER_B64 }}" | > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
-            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER_B64 }}" | > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
-            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
-
-      # 9. EC2에 파일 복사
+      # 8. EC2에 파일 복사 (순서를 앞으로 이동)
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -88,6 +76,19 @@ jobs:
           target: "/home/ubuntu/chat-app"
           timeout: 120s
           command_timeout: 120s
+
+      # 9. application.yml 업로드 (디코딩 포함)
+      - name: Upload application.yml for each service
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER }}" > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER }}" > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
+            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
+
 
       # 10. EC2에서 Docker 재시작
       - name: SSH and deploy with docker-compose
