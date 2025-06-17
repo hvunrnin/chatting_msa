@@ -85,5 +85,5 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             cd /home/ubuntu/chat-app/deploy-files
-            docker-compose down
-            docker-compose up --build -d
+            sudo docker-compose down
+            sudo docker-compose up --build -d
