@@ -33,22 +33,6 @@ public class KafkaChatConsumer {
                 message.getTimestamp() != null ? message.getTimestamp() : Instant.now()
         );
 
-//        // 2. WebSocket 전송 - ChatMessage로 변환
-//        messagingTemplate.convertAndSend(
-//                "/sub/chat/room/" + message.getRoomId(),
-//                ChatMessage.builder()
-//                        .roomId(message.getRoomId())
-//                        .sender(message.getSender())
-//                        .message(message.getMessage())
-//                        .timestamp(message.getTimestamp())
-//                        .messageType(
-//                                message.getMessageType() != null
-//                                        ? ChatMessage.MessageType.valueOf(message.getMessageType())
-//                                        : ChatMessage.MessageType.TALK
-//                        )
-//                        .build()
-//        );
-
         // 2. 저장 완료 후 다시 Kafka로 전송
         kafkaSendMsgProducer.send(message);
     }
