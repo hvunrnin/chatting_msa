@@ -3,9 +3,11 @@ services:
     build: ./chat-producer
     container_name: chat-producer-1
     ports:
-      - "8091:8090" 
+      - "8091:8090"
     environment:
       - INSTANCE_ID=producer-1
+    volumes:
+      - ./chat-producer/src/main/resources/application.yml:/app/application.yml
     networks:
       - chatnet
 
@@ -16,6 +18,8 @@ services:
       - "8092:8090"
     environment:
       - INSTANCE_ID=producer-2
+    volumes:
+      - ./chat-producer/src/main/resources/application.yml:/app/application.yml
     networks:
       - chatnet
 
@@ -26,6 +30,8 @@ services:
       - "8093:8090"
     environment:
       - INSTANCE_ID=producer-3
+    volumes:
+      - ./chat-producer/src/main/resources/application.yml:/app/application.yml
     networks:
       - chatnet
 
@@ -34,8 +40,11 @@ services:
     container_name: chat-consumer
     ports:
       - "8094:8091"
+    volumes:
+      - ./chat-consumer/src/main/resources/application.yml:/app/application.yml
     networks:
       - chatnet
+
 
   nginx:
     image: nginx:latest
