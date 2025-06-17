@@ -59,11 +59,11 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}  # 여기 PEM 키 전체가 들어가야 함
+          key: ${{ secrets.EC2_KEY }}
           source: deploy-files/
           target: "/home/ubuntu/chat-app"
-          timeout: 120
-          command_timeout: 120
+          timeout: 120s
+          command_timeout: 120s
 
       # 8. EC2에서 Docker 재시작
       - name: SSH and deploy with docker-compose
