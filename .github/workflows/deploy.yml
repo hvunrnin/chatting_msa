@@ -73,8 +73,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER_B64 }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
-            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER_B64 }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER_B64 }}" | > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER_B64 }}" | > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
             chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
 
       # 9. EC2에 파일 복사
