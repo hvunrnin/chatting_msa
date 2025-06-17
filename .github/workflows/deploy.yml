@@ -40,8 +40,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           source: |
-            chat-producer/build/libs/*.jar
-            chat-consumer/build/libs/*.jar
+            chat-producer/build/libs/app.jar
+            chat-consumer/build/libs/app.jar
             docker-compose.yml
             nginx/
             chat-producer/
