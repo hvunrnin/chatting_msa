@@ -9,63 +9,74 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. 코드 가져오기
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          path: chatting_msa  
 
+      # 2. JDK 설정
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # --- Build chat-producer ---
+      # 3. chat-producer 빌드
       - name: Make gradlew executable (producer)
-        run: chmod +x chatting_msa/chat-producer/gradlew
+        run: chmod +x chat-producer/gradlew
 
       - name: Build JAR for chat-producer
-        run: cd chatting_msa/chat-producer && ./gradlew bootJar
+        run: cd chat-producer && ./gradlew bootJar
 
-      # --- Build chat-consumer ---
+      # 4. chat-consumer 빌드
       - name: Make gradlew executable (consumer)
-        run: chmod +x chatting_msa/chat-consumer/gradlew
+        run: chmod +x chat-consumer/gradlew
 
       - name: Build JAR for chat-consumer
-        run: cd chatting_msa/chat-consumer && ./gradlew bootJar
+        run: cd chat-consumer && ./gradlew bootJar
 
-      # --- Debug: Check for built JARs ---
+      # 5. 빌드된 JAR 확인 (디버깅용)
       - name: Debug — Check built files
         run: |
           echo "✅ Checking producer JAR..."
-          ls -al chatting_msa/chat-producer/build/libs
+          ls -al chat-producer/build/libs
           echo "✅ Checking consumer JAR..."
-          ls -al chatting_msa/chat-consumer/build/libs
+          ls -al chat-consumer/build/libs
 
-      # --- Copy files to EC2 ---
+      # 6. 배포 디렉토리 구성
+      - name: Prepare deployment files
+        run: |
+          mkdir deploy-files
+          cp chat-producer/build/libs/app.jar deploy-files/chat-producer.jar
+          cp chat-consumer/build/libs/app.jar deploy-files/chat-consumer.jar
+          cp docker-compose.yml deploy-files/
+          cp -r nginx deploy-files/
+          cp -r chat-producer deploy-files/
+          cp -r chat-consumer deploy-files/
+
+      # 7. SSH 키 복호화 (base64 → pem 파일)
+      - name: Decode EC2 SSH Key
+        run: |
+          echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 -d > ec2_key.pem
+          chmod 600 ec2_key.pem
+
+      # 8. EC2에 파일 복사
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
-          source: |
-            chatting_msa/chat-producer/build/libs/app.jar
-            chatting_msa/chat-consumer/build/libs/app.jar
-            chatting_msa/docker-compose.yml
-            chatting_msa/nginx/
-            chatting_msa/chat-producer/
-            chatting_msa/chat-consumer/
-          target: "~/chat-app"
+          key_path: ./ec2_key.pem
+          source: deploy-files/
+          target: "/home/ubuntu/chat-app"
 
-      # --- Remote deploy on EC2 ---
+      # 9. EC2에서 Docker 재시작
       - name: SSH and deploy with docker-compose
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_KEY }}
+          key_path: ./ec2_key.pem
           script: |
-            cd ~/chat-app
+            cd ~/chat-app/deploy-files
             docker-compose down
             docker-compose up --build -d
