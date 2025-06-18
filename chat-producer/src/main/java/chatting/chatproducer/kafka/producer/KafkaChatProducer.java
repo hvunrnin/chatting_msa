@@ -22,25 +22,17 @@ public class KafkaChatProducer {
 //    }
     public void sendMessage(ChatKafkaMessage message) {
         try {
-            kafkaTemplate.send(TOPIC_NAME, message).get(); // 동기 블록
-            log.info("Kafka 전송 성공");
-        } catch (Exception ex) {
-            log.error("Kafka 전송 실패", ex);
-            FailedChatMessageDocument failedMessage = FailedChatMessageDocument.builder()
-                    .roomId(message.getRoomId())
-                    .sender(message.getSender())
-                    .message(message.getMessage())
-                    .timestamp(message.getTimestamp())
-                    .status("FAILED")
-                    .build();
-
-            try {
-                failedMessageRepository.save(failedMessage);
-                log.info("failedMsg MongoDB 저장 성공");
-            } catch (Exception mongoEx) {
-                log.error("failedMsg MongoDB 저장 실패", mongoEx);
-            }
+            var future = kafkaTemplate.send(TOPIC_NAME, message);
+            var result = future.get(); // 동기 대기
+            log.info("Kafka 전송 성공: offset={}, partition={}, key={}, roomId={}",
+                    result.getRecordMetadata().offset(),
+                    result.getRecordMetadata().partition(),
+                    result.getProducerRecord().key(),
+                    message.getRoomId());
+        } catch (Exception e) {
+            log.error("Kafka 전송 실패: roomId={}, msg={}", message.getRoomId(), message.getMessage(), e);
         }
+
     }
 
 
