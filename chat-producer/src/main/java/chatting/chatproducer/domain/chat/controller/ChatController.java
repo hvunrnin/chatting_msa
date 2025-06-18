@@ -3,6 +3,7 @@ package chatting.chatproducer.domain.chat.controller;
 import chatting.chatproducer.domain.chat.service.ChatService;
 import chatting.chatproducer.domain.room.entity.RoomUser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/chat")
@@ -95,6 +97,9 @@ public class ChatController {
 
     @MessageMapping("/chat/message")
     public void message(ChatMessage message) {
+        log.info(">>> WebSocket 메시지 수신: roomId={}, sender={}, message={}, timestamp={}",
+                message.getRoomId(), message.getSender(), message.getMessage(), message.getTimestamp());
+
         Instant now = Instant.now();
         if (message.getTimestamp() == null) {
             message.setTimestamp(now);
