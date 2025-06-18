@@ -89,7 +89,8 @@ jobs:
             sudo rm -rf /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
             
             echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
-            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
+            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
+            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
 
 
       # 10. EC2에서 Docker 재시작
