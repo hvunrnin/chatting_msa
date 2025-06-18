@@ -24,16 +24,17 @@ public class KafkaChatProducer {
         try {
             var future = kafkaTemplate.send(TOPIC_NAME, message);
             var result = future.get(); // 동기 대기
-            log.info("Kafka 전송 성공: offset={}, partition={}, key={}, roomId={}",
+            log.info("Kafka 전송 성공: offset={}, partition={}, key={}, roomId={}, message={}",
                     result.getRecordMetadata().offset(),
                     result.getRecordMetadata().partition(),
                     result.getProducerRecord().key(),
-                    message.getRoomId());
+                    message.getRoomId(),
+                    message.getMessage());
         } catch (Exception e) {
             log.error("Kafka 전송 실패: roomId={}, msg={}", message.getRoomId(), message.getMessage(), e);
         }
-
     }
+
 
 
 }
