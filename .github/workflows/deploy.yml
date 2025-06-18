@@ -42,10 +42,6 @@ jobs:
           echo "✅ Checking consumer JAR..."
           ls -al chat-consumer/build/libs
 
-      - name: Clean incorrect local application.yml
-        run: |
-          rm -rf chat-consumer/src/main/resources/application.yml
-          rm -rf chat-producer/src/main/resources/application.yml
 
       # 6. 배포 디렉토리 구성
       - name: Prepare deployment files
@@ -93,8 +89,7 @@ jobs:
             sudo rm -rf /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
             
             echo "${{ secrets.APPLICATION_AWS_YML_PRODUCER }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
-            echo "${{ secrets.APPLICATION_AWS_YML_CONSUMER }}" | base64 -d > /home/ubuntu/chat-app/deploy-files/chat-consumer/src/main/resources/application.yml
-            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-*/src/main/resources/application.yml
+            chmod 600 /home/ubuntu/chat-app/deploy-files/chat-producer/src/main/resources/application.yml
 
 
       # 10. EC2에서 Docker 재시작
