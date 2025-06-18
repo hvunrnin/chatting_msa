@@ -21,30 +21,27 @@ public class KafkaChatProducer {
 //        kafkaTemplate.send(TOPIC_NAME, message);
 //    }
     public void sendMessage(ChatKafkaMessage message) {
-        kafkaTemplate.send(TOPIC_NAME, message)
-                .handle((result, ex) -> {
-                    if (ex != null) {
-                        log.error("Kafka 전송 실패", ex);
-                        FailedChatMessageDocument failedMessage = FailedChatMessageDocument.builder()
-                                .roomId(message.getRoomId())
-                                .sender(message.getSender())
-                                .message(message.getMessage())
-                                .timestamp(message.getTimestamp())
-                                .status("FAILED")
-                                .build();
+        try {
+            kafkaTemplate.send(TOPIC_NAME, message).get(); // 동기 블록
+            log.info("Kafka 전송 성공");
+        } catch (Exception ex) {
+            log.error("Kafka 전송 실패", ex);
+            FailedChatMessageDocument failedMessage = FailedChatMessageDocument.builder()
+                    .roomId(message.getRoomId())
+                    .sender(message.getSender())
+                    .message(message.getMessage())
+                    .timestamp(message.getTimestamp())
+                    .status("FAILED")
+                    .build();
 
-                        try {
-                            failedMessageRepository.save(failedMessage);
-                            log.info("failedMsg MongoDB 저장 성공");
-                        } catch (Exception mongoEx) {
-                            log.error("failedMsg MongoDB 저장 실패", mongoEx);
-                        }
-                    } else {
-                        log.info(" Kafka 전송 성공: {}", result.getRecordMetadata());
-                    }
-                    return null;
-                });
-
+            try {
+                failedMessageRepository.save(failedMessage);
+                log.info("failedMsg MongoDB 저장 성공");
+            } catch (Exception mongoEx) {
+                log.error("failedMsg MongoDB 저장 실패", mongoEx);
+            }
+        }
     }
+
 
 }
