@@ -21,6 +21,8 @@ public class KafkaChatProducer {
 //        kafkaTemplate.send(TOPIC_NAME, message);
 //    }
     public void sendMessage(ChatKafkaMessage message) {
+        log.info(">>> sendMessage called: roomId={}, sender={}, message={}",
+                message.getRoomId(), message.getSender(), message.getMessage());  
         try {
             var future = kafkaTemplate.send(TOPIC_NAME, message);
             var result = future.get(); // 동기 대기
