@@ -15,23 +15,19 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/message")
 @RequiredArgsConstructor
 public class ChatMessageController {
+
     private final ChatMessageMongoRepository chatMessageMongoRepository;
 
     @GetMapping("/history")
     public List<ChatMessageDTO> getRecentMessages(@RequestParam String roomId) {
-        return chatMessageMongoRepository.findById(roomId)
-                .map(doc -> doc.getMessagesByDate().values().stream()
-                        .flatMap(List::stream)
-                        .sorted((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
-                        .map(m -> ChatMessageDTO.builder()
-                                .sender(m.getSender())
-                                .message(m.getMessage())
-                                .timestamp(m.getTimestamp())
-                                .build())
-                        .collect(Collectors.toList()))
-                .orElse(List.of());
+        return chatMessageMongoRepository
+                .findByRoomIdOrderByTimestampAsc(roomId)
+                .stream()
+                .map(doc -> ChatMessageDTO.builder()
+                        .sender(doc.getSender())
+                        .message(doc.getMessage())
+                        .timestamp(doc.getTimestamp())
+                        .build())
+                .collect(Collectors.toList());
     }
-
 }
-
-
