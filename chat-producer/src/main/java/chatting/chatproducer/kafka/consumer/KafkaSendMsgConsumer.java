@@ -21,6 +21,7 @@ public class KafkaSendMsgConsumer {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void consumeSent(ChatKafkaMessage message) {
+        log.info("✅ Kafka 메시지 받음: {}", message);
 
         // WebSocket으로 전송
         messagingTemplate.convertAndSend(
