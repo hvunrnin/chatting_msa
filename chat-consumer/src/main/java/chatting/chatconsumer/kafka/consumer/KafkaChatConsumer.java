@@ -30,6 +30,7 @@ public class KafkaChatConsumer {
                 message.getRoomId(),
                 message.getSender(),
                 message.getMessage(),
+                message.getMessageType(),
                 message.getTimestamp() != null ? message.getTimestamp() : Instant.now()
         );
 

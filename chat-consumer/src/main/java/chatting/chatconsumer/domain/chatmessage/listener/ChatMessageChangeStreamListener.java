@@ -45,7 +45,7 @@ public class ChatMessageChangeStreamListener {
                         String roomId = fullDoc.getString("roomId");
                         String sender = fullDoc.getString("sender");
                         String message = fullDoc.getString("message");
-                        String messageType = "TALK";
+                        String messageType = fullDoc.getString("messageType");
                         java.util.Date ts = fullDoc.getDate("timestamp");
 
                         ChatKafkaMessage msg = ChatKafkaMessage.builder()

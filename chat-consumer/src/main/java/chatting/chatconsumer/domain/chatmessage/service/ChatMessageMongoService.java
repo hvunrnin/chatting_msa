@@ -19,13 +19,14 @@ public class ChatMessageMongoService {
 
     private final ChatMessageMongoRepository chatMessageMongoRepository;
 
-    public void saveMessage(String roomId, String sender, String content, Instant timestamp) {
+    public void saveMessage(String roomId, String sender, String content, String messageType, Instant timestamp) {
 
         ChatMessageDocument document = ChatMessageDocument.builder()
                 .roomId(roomId)
                 .sender(sender)
                 .message(content)
                 .timestamp(timestamp)
+                .messageType(messageType)
                 .status("PENDING")
                 .build();
 

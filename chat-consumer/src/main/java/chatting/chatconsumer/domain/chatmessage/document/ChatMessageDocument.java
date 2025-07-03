@@ -22,8 +22,10 @@ public class ChatMessageDocument {
     private Instant timestamp;
 
     private String message;
+    private String messageType;
 
     private String status;
+
 }
 
 //@Document(collection = "chat_messages")
