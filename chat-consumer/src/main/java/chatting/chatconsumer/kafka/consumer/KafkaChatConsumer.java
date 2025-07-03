@@ -34,7 +34,7 @@ public class KafkaChatConsumer {
         );
 
         // 2. 저장 완료 후 다시 Kafka로 전송
-        kafkaSendMsgProducer.send(message);
+//        kafkaSendMsgProducer.send(message);
     }
 }
 
