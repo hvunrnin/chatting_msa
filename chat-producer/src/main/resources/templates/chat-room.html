@@ -285,6 +285,20 @@
                 appendMessage(msg.sender, msg.message, msg.timestamp);
             });
 
+            // 순서 꼬임 감지 시 서버에서 refresh 알림 수신
+            stompClient.subscribe(`/sub/chat/room/${roomId}/refresh`, () => {
+                console.warn("순서 꼬임 감지됨. 메시지 새로고침");
+                chatBox.innerHTML = ""; // 기존 메시지 초기화
+
+                fetch(`/api/message/history?roomId=${roomId}`)
+                    .then(res => res.json())
+                    .then(messages => {
+                        messages.forEach(msg => {
+                            appendMessage(msg.sender, msg.message, msg.timestamp);
+                        });
+                    });
+            });
+
             // 채팅방 목록 갱신 구독 (서버에서 최초 입장 시 알림 보내줌)
             stompClient.subscribe(`/sub/user/${userId}/room-refresh`, () => {
                 reloadRoomList();

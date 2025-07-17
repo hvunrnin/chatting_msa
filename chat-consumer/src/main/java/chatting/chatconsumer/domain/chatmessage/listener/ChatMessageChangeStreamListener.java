@@ -32,43 +32,38 @@ public class ChatMessageChangeStreamListener {
                 .watch()
                 .forEach((ChangeStreamDocument<Document> change) -> {
                     Document fullDoc = change.getFullDocument();
-
                     if (fullDoc == null) return;
 
-                    String status = fullDoc.getString("status");
-                    if (!"PENDING".equals(status)) {
-                        return; // SENT 상태면 무시
-                    }
+                    String id = fullDoc.getObjectId("_id").toHexString();
 
                     try {
-                        String id = fullDoc.getObjectId("_id").toHexString();
-                        String roomId = fullDoc.getString("roomId");
-                        String sender = fullDoc.getString("sender");
-                        String message = fullDoc.getString("message");
-                        String messageType = fullDoc.getString("messageType");
-                        java.util.Date ts = fullDoc.getDate("timestamp");
-
-                        ChatKafkaMessage msg = ChatKafkaMessage.builder()
-                                .roomId(roomId)
-                                .sender(sender)
-                                .message(message)
-                                .timestamp(ts.toInstant())
-                                .messageType(messageType)
-                                .build();
-
-                        kafkaSendMsgProducer.send(msg);
-
-                        // 상태 SENT로 변경
                         chatMessageMongoRepository.findById(id).ifPresent(doc -> {
+                            if (!"PENDING".equals(doc.getStatus())) {
+                                return; // 이미 처리됨
+                            }
+
+                            ChatKafkaMessage msg = ChatKafkaMessage.builder()
+                                    .roomId(doc.getRoomId())
+                                    .sender(doc.getSender())
+                                    .message(doc.getMessage())
+                                    .timestamp(doc.getTimestamp())
+                                    .messageType(doc.getMessageType())
+                                    .build();
+
+                            // Kafka 퍼블리시
+                            kafkaSendMsgProducer.send(msg);
+
+                            // 상태 SENT로 변경
                             doc.setStatus("SENT");
                             chatMessageMongoRepository.save(doc);
-                        });
 
-                        log.info("Change Stream 발행 완료: {}", id);
+                            log.info("Change Stream 발행 완료: {}", doc.getId());
+                        });
 
                     } catch (Exception e) {
                         log.error("Change Stream 발행 실패: {}", e.getMessage(), e);
                     }
                 });
     }
+
 }
