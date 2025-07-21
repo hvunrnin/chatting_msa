@@ -24,7 +24,8 @@ public class KafkaChatProducer {
         log.info(">>> sendMessage called: roomId={}, sender={}, message={}",
                 message.getRoomId(), message.getSender(), message.getMessage());
         try {
-            var future = kafkaTemplate.send(TOPIC_NAME, message);
+            // roomId를 key로 사용하여 메시지 전송
+            var future = kafkaTemplate.send(TOPIC_NAME, message.getRoomId(), message);
             var result = future.get(); // 동기 대기
             log.info("Kafka 전송 성공: offset={}, partition={}, key={}, roomId={}, message={}",
                     result.getRecordMetadata().offset(),

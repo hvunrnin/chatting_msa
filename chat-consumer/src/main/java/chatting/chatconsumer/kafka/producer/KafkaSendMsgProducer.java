@@ -13,6 +13,7 @@ public class KafkaSendMsgProducer {
     private static final String TOPIC_NAME = "chat-message-sent";
 
     public void send(ChatKafkaMessage message) {
-        kafkaTemplate.send(TOPIC_NAME, message);
+        // roomId를 key로 사용하여 메시지 전송
+        kafkaTemplate.send(TOPIC_NAME, message.getRoomId(), message);
     }
 }
