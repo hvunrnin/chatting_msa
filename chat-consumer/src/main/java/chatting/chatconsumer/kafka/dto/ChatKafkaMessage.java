@@ -27,5 +27,4 @@ public class ChatKafkaMessage {
                 .messageType(chatMessage.getMessageType().name())
                 .build();
     }
-}
-
+} 

@@ -4,6 +4,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.*;
 
 import java.io.Serializable;
@@ -25,11 +27,24 @@ public class RoomUser {
 
     private LocalDateTime joinedAt;
 
+    @Enumerated(EnumType.STRING)
+    private UserRole role;
+
     public static RoomUser of(String roomId, String userId) {
         return RoomUser.builder()
                 .roomId(roomId)
                 .userId(userId)
                 .joinedAt(LocalDateTime.now())
+                .role(UserRole.MEMBER)
+                .build();
+    }
+
+    public static RoomUser of(String roomId, String userId, UserRole role) {
+        return RoomUser.builder()
+                .roomId(roomId)
+                .userId(userId)
+                .joinedAt(LocalDateTime.now())
+                .role(role)
                 .build();
     }
 
@@ -43,5 +58,21 @@ public class RoomUser {
 
         @Column(name = "user_id")
         private String userId;
+    }
+
+    public enum UserRole {
+        OWNER(3),      // 방장 (최고 권한)
+        ADMIN(2),      // 관리자
+        MEMBER(1);     // 일반 멤버
+
+        private final int priority;
+
+        UserRole(int priority) {
+            this.priority = priority;
+        }
+
+        public int getPriority() {
+            return priority;
+        }
     }
 }
