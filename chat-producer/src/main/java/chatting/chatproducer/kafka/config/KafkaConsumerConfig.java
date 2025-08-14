@@ -1,6 +1,7 @@
 package chatting.chatproducer.kafka.config;
 
 import chatting.chatproducer.kafka.dto.ChatKafkaMessage;
+import chatting.chatproducer.kafka.dto.MergeEventDTO;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,6 +45,31 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, ChatKafkaMessage> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
+        return factory;
+    }
+
+    @Bean
+    public ConsumerFactory<String, MergeEventDTO> mergeEventConsumerFactory() {
+        JsonDeserializer<MergeEventDTO> deserializer = new JsonDeserializer<>(MergeEventDTO.class);
+        deserializer.setRemoveTypeHeaders(false);
+        deserializer.addTrustedPackages("*");
+        deserializer.setUseTypeMapperForKey(true);
+
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "merge-event-consumer-group");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserializer);
+
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, MergeEventDTO> mergeEventKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, MergeEventDTO> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(mergeEventConsumerFactory());
         return factory;
     }
 }
