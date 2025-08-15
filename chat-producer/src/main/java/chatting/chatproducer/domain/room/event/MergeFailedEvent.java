@@ -1,17 +1,23 @@
 package chatting.chatproducer.domain.room.event;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
-@SuperBuilder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class MergeFailedEvent extends BaseMergeEvent {
+public class MergeFailedEvent {
+    private String mergeId;
+    private String targetRoomId;
+    private List<String> sourceRoomIds;
+    private LocalDateTime timestamp;
+    private MergeEventType eventType;
     private String failureReason;
     private String failedStep;
 } 
