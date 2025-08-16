@@ -1,5 +1,6 @@
 package chatting.chatproducer.kafka.consumer;
 
+import chatting.chatproducer.domain.room.service.ChatRoomMergeService;
 import chatting.chatproducer.kafka.dto.MergeEventDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class MergeEventConsumer {
+
+    private final ChatRoomMergeService chatRoomMergeService;
 
     @KafkaListener(
             topics = "merge-events",
@@ -52,36 +55,36 @@ public class MergeEventConsumer {
     private void handleMergeInitiated(MergeEventDTO event) {
         log.info("병합 시작 처리: mergeId={}, targetRoomId={}, sourceRoomIds={}",
                 event.getMergeId(), event.getTargetRoomId(), event.getSourceRoomIds());
-        // TODO: 병합 시작 로직 구현
+        chatRoomMergeService.handleRoomsLocked(event);
     }
 
     private void handleRoomsLocked(MergeEventDTO event) {
         log.info("방 잠금 완료 처리: mergeId={}, targetRoomId={}",
                 event.getMergeId(), event.getTargetRoomId());
-        // TODO: 방 잠금 완료 로직 구현
+        chatRoomMergeService.handleMessagesMigrated(event);
     }
 
     private void handleMessagesMigrated(MergeEventDTO event) {
         log.info("메시지 마이그레이션 완료 처리: mergeId={}, migratedCount={}",
                 event.getMergeId(), event.getMigratedMessageCount());
-        // TODO: 메시지 마이그레이션 완료 로직 구현
+        chatRoomMergeService.handleUsersMigrated(event);
     }
 
     private void handleUsersMigrated(MergeEventDTO event) {
         log.info("사용자 마이그레이션 완료 처리: mergeId={}, migratedCount={}",
                 event.getMergeId(), event.getMigratedUserCount());
-        // TODO: 사용자 마이그레이션 완료 로직 구현
+        chatRoomMergeService.handleMergeCompleted(event);
     }
 
     private void handleMergeCompleted(MergeEventDTO event) {
         log.info("병합 완료 처리: mergeId={}, totalMessages={}, totalUsers={}",
                 event.getMergeId(), event.getTotalMigratedMessages(), event.getTotalMigratedUsers());
-        // TODO: 병합 완료 로직 구현
+        // 병합 완료는 이미 ChatRoomMergeService에서 처리됨
     }
 
     private void handleMergeFailed(MergeEventDTO event) {
         log.error("병합 실패 처리: mergeId={}, reason={}, failedStep={}",
                 event.getMergeId(), event.getFailureReason(), event.getFailedStep());
-        // TODO: 병합 실패 로직 구현
+        chatRoomMergeService.handleMergeFailed(event);
     }
 } 

@@ -86,7 +86,7 @@ public class RoomMergeController {
             
             return ResponseEntity.badRequest().body(MergeStatusResponse.builder()
                     .mergeId(mergeId)
-                    .status("ERROR") ㅇ
+                    .status("ERROR")
                     .message("병합 상태 조회 실패: " + e.getMessage())
                     .build());
         }
