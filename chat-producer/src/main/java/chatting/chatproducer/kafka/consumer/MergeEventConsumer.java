@@ -72,11 +72,8 @@ public class MergeEventConsumer {
                 event.getMergeId(), event.getTargetRoomId(), event.getSourceRoomIds());
         
         try {
-            // MERGE_INITIATED 이벤트가 들어오면 전체 병합 프로세스를 순차적으로 실행
+            // MERGE_INITIATED 이벤트가 들어오면 방을 잠그는 작업을 수행
             chatRoomMergeService.handleRoomsLocked(event);
-            chatRoomMergeService.handleMessagesMigrate(event);
-            chatRoomMergeService.handleUsersMigrate(event);
-            chatRoomMergeService.handleMergeCompleted(event);
             log.info("=== 병합 시작 처리 완료 ===");
         } catch (Exception e) {
             log.error("=== 병합 시작 처리 실패 ===", e);
