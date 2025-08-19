@@ -65,18 +65,27 @@ public class ChatRoomMergeService {
     @Transactional
     public void handleRoomsLocked(MergeEventDTO event) {
         String mergeId = event.getMergeId();
+        log.info("=== 방 잠금 처리 시작 ===");
         log.info("방 잠금 처리 시작: mergeId={}", mergeId);
 
         try {
-            // 1. 병합 상태 업데이트
+            // 1. 병합 상태 조회 (트랜잭션 경계 문제 해결을 위해 잠시 대기)
+            log.info("병합 상태 조회 대기 중...");
+            Thread.sleep(100);
+            
+            log.info("병합 상태 조회 시작...");
             MergeStatus mergeStatus = getMergeStatus(mergeId);
+            log.info("병합 상태 조회 성공: currentStep={}, status={}", mergeStatus.getCurrentStep(), mergeStatus.getStatus());
+            
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.ROOMS_LOCKED);
             mergeStatusRepository.save(mergeStatus);
+            mergeStatusRepository.flush(); // 즉시 DB에 반영
+            log.info("방 잠금 상태 업데이트 완료: mergeId={}", mergeId);
 
-            // 2. 메시지 마이그레이션 시작
-            messageMigrationService.migrateMessages(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
+            log.info("=== 방 잠금 처리 완료 ===");
 
         } catch (Exception e) {
+            log.error("=== 방 잠금 처리 실패 ===");
             log.error("방 잠금 처리 실패: mergeId={}", mergeId, e);
             publishMergeFailedEvent(mergeId, event.getTargetRoomId(), event.getSourceRoomIds(), "ROOMS_LOCKED", e.getMessage());
         }
@@ -86,19 +95,19 @@ public class ChatRoomMergeService {
      * 메시지 마이그레이션 완료 처리
      */
     @Transactional
-    public void handleMessagesMigrated(MergeEventDTO event) {
+    public void handleMessagesMigrate(MergeEventDTO event) {
         String mergeId = event.getMergeId();
-        log.info("메시지 마이그레이션 완료 처리: mergeId={}, migratedCount={}", 
-                mergeId, event.getMigratedMessageCount());
 
         try {
-            // 1. 병합 상태 업데이트
+            // 1. 메시지 마이그레이션 시작
+            log.info("메시지 마이그레이션 시작...");
+            messageMigrationService.migrateMessages(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
+            log.info("메시지 마이그레이션 완료");
+
+            // 2. 병합 상태 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.MESSAGES_MIGRATED);
             mergeStatusRepository.save(mergeStatus);
-
-            // 2. 사용자 마이그레이션 시작
-            userMigrationService.migrateUsers(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
 
         } catch (Exception e) {
             log.error("메시지 마이그레이션 완료 처리 실패: mergeId={}", mergeId, e);
@@ -110,18 +119,22 @@ public class ChatRoomMergeService {
      * 사용자 마이그레이션 완료 처리
      */
     @Transactional
-    public void handleUsersMigrated(MergeEventDTO event) {
+    public void handleUsersMigrate(MergeEventDTO event) {
         String mergeId = event.getMergeId();
-        log.info("사용자 마이그레이션 완료 처리: mergeId={}, migratedCount={}", 
-                mergeId, event.getMigratedUserCount());
 
         try {
-            // 1. 병합 상태 업데이트
+            // 1. 사용자 마이그레이션 시작
+            log.info("사용자 마이그레이션 시작...");
+            userMigrationService.migrateUsers(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
+            log.info("사용자 마이그레이션 완료");
+
+            // 2. 병합 상태 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.USERS_MIGRATED);
             mergeStatusRepository.save(mergeStatus);
+            log.info("tlqkf 들어가냐?");
 
-            // 2. 최종 검증 및 완료
+            // 3. 최종 검증 및 완료
             mergeValidationService.validateMerge(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
 
             // 3. 병합 완료 이벤트 발행
@@ -153,9 +166,8 @@ public class ChatRoomMergeService {
         try {
             // 1. 병합 상태 완료로 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
-            mergeStatus.setCurrentStep(MergeStatus.MergeStep.COMPLETED);
             mergeStatus.setStatus("COMPLETED");
-            mergeStatus.setCompletedAt(LocalDateTime.now());
+            //mergeStatus.setCompletedAt(LocalDateTime.now());
             mergeStatusRepository.save(mergeStatus);
 
             log.info("병합 완료 처리 완료: mergeId={}", mergeId);
@@ -179,7 +191,7 @@ public class ChatRoomMergeService {
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setStatus("FAILED");
             mergeStatus.setFailureReason(event.getFailureReason());
-            mergeStatus.setCompletedAt(LocalDateTime.now());
+            //mergeStatus.setCompletedAt(LocalDateTime.now());
             mergeStatusRepository.save(mergeStatus);
 
             // 2. 롤백 처리 (필요시)

@@ -21,6 +21,6 @@ public interface MergeStatusRepository extends JpaRepository<MergeStatus, String
     List<MergeStatus> findByStatusAndCurrentStepNot(String status, MergeStatus.MergeStep step);
     
     // 최근 병합 작업들 조회
-    @Query("SELECT m FROM MergeStatus m ORDER BY m.startedAt DESC")
+    @Query("SELECT m FROM MergeStatus m")
     List<MergeStatus> findRecentMerges();
 } 

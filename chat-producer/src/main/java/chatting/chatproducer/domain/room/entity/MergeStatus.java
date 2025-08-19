@@ -35,10 +35,10 @@ public class MergeStatus {
     private String status; // IN_PROGRESS, COMPLETED, FAILED
 
     private String failureReason;
-
-    private LocalDateTime startedAt;
-
-    private LocalDateTime completedAt;
+//
+//    private LocalDateTime startedAt;
+//
+//    private LocalDateTime completedAt;
 
     public enum MergeStep {
         INITIATED,          // 병합 시작
@@ -55,7 +55,7 @@ public class MergeStatus {
                 .sourceRoomIds(sourceRoomIds)
                 .currentStep(MergeStep.INITIATED)
                 .status("IN_PROGRESS")
-                .startedAt(LocalDateTime.now())
+                //.startedAt(LocalDateTime.now())
                 .build();
     }
 } 

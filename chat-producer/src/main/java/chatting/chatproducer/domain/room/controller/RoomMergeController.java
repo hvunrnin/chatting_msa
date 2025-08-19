@@ -77,8 +77,8 @@ public class RoomMergeController {
                     .currentStep(mergeStatus.getCurrentStep().name())
                     .status(mergeStatus.getStatus())
                     .failureReason(mergeStatus.getFailureReason())
-                    .startedAt(mergeStatus.getStartedAt())
-                    .completedAt(mergeStatus.getCompletedAt())
+//                    .startedAt(mergeStatus.getStartedAt())
+//                    .completedAt(mergeStatus.getCompletedAt())
                     .build());
 
         } catch (Exception e) {

@@ -40,8 +40,7 @@ public class MergeEventProducer {
 
     private void publishEvent(MergeEventDTO event, String eventType) {
         event.setEventType(eventType);
-        event.setTimestamp(java.time.LocalDateTime.now());
-        
+
         try {
             var future = kafkaTemplate.send(TOPIC_NAME, event.getMergeId(), event);
             var result = future.get(); // 동기 대기
@@ -50,9 +49,11 @@ public class MergeEventProducer {
                     eventType, event.getMergeId(),
                     result.getRecordMetadata().offset(),
                     result.getRecordMetadata().partition());
+            log.info("=== 병합 이벤트 발행 완료 ===");
                     
         } catch (Exception e) {
             log.error("병합 이벤트 발행 실패: eventType={}, mergeId={}", eventType, event.getMergeId(), e);
+            log.info("=== 병합 이벤트 발행 실패 ===");
             throw new RuntimeException("병합 이벤트 발행 실패", e);
         }
     }

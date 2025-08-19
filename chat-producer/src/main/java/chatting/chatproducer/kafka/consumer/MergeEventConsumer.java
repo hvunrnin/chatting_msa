@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -14,14 +16,26 @@ public class MergeEventConsumer {
 
     private final ChatRoomMergeService chatRoomMergeService;
 
+    @PostConstruct
+    public void init() {
+        log.info("=== MergeEventConsumer 초기화 시작 ===");
+        log.info("Kafka 토픽: merge-events");
+        log.info("Consumer Group: merge-event-consumer-group-debug, test-consumer-group");
+        log.info("Container Factory: kafkaListenerContainerFactory");
+        log.info("MergeEventConsumer 초기화 완료");
+        log.info("=== MergeEventConsumer 초기화 완료 ===");
+    }
+
     @KafkaListener(
             topics = "merge-events",
             groupId = "merge-event-consumer-group",
             containerFactory = "mergeEventKafkaListenerContainerFactory"
     )
     public void consumeMergeEvent(MergeEventDTO event) {
+        log.info("=== 병합 이벤트 수신 시작 ===");
         log.info("병합 이벤트 수신: eventType={}, mergeId={}, targetRoomId={}",
                 event.getEventType(), event.getMergeId(), event.getTargetRoomId());
+        log.info("=== 병합 이벤트 수신 완료 ===");
 
         try {
             switch (event.getEventType()) {
@@ -29,6 +43,7 @@ public class MergeEventConsumer {
                     handleMergeInitiated(event);
                     break;
                 case "ROOMS_LOCKED":
+                    log.info("여긴?????");
                     handleRoomsLocked(event);
                     break;
                 case "MESSAGES_MIGRATED":
@@ -36,9 +51,6 @@ public class MergeEventConsumer {
                     break;
                 case "USERS_MIGRATED":
                     handleUsersMigrated(event);
-                    break;
-                case "MERGE_COMPLETED":
-                    handleMergeCompleted(event);
                     break;
                 case "MERGE_FAILED":
                     handleMergeFailed(event);
@@ -52,34 +64,39 @@ public class MergeEventConsumer {
         }
     }
 
+
+
     private void handleMergeInitiated(MergeEventDTO event) {
+        log.info("=== 병합 시작 처리 시작 ===");
         log.info("병합 시작 처리: mergeId={}, targetRoomId={}, sourceRoomIds={}",
                 event.getMergeId(), event.getTargetRoomId(), event.getSourceRoomIds());
-        chatRoomMergeService.handleRoomsLocked(event);
+        
+        try {
+            chatRoomMergeService.handleRoomsLocked(event);
+            log.info("=== 병합 시작 처리 완료 ===");
+        } catch (Exception e) {
+            log.error("=== 병합 시작 처리 실패 ===", e);
+            throw e;
+        }
     }
 
     private void handleRoomsLocked(MergeEventDTO event) {
         log.info("방 잠금 완료 처리: mergeId={}, targetRoomId={}",
                 event.getMergeId(), event.getTargetRoomId());
-        chatRoomMergeService.handleMessagesMigrated(event);
+        chatRoomMergeService.handleMessagesMigrate(event);
     }
 
     private void handleMessagesMigrated(MergeEventDTO event) {
         log.info("메시지 마이그레이션 완료 처리: mergeId={}, migratedCount={}",
                 event.getMergeId(), event.getMigratedMessageCount());
-        chatRoomMergeService.handleUsersMigrated(event);
+        // 메시지 마이그레이션은 이미 완료되었으므로 바로 사용자 마이그레이션으로 진행
+        chatRoomMergeService.handleUsersMigrate(event);
     }
 
     private void handleUsersMigrated(MergeEventDTO event) {
         log.info("사용자 마이그레이션 완료 처리: mergeId={}, migratedCount={}",
                 event.getMergeId(), event.getMigratedUserCount());
         chatRoomMergeService.handleMergeCompleted(event);
-    }
-
-    private void handleMergeCompleted(MergeEventDTO event) {
-        log.info("병합 완료 처리: mergeId={}, totalMessages={}, totalUsers={}",
-                event.getMergeId(), event.getTotalMigratedMessages(), event.getTotalMigratedUsers());
-        // 병합 완료는 이미 ChatRoomMergeService에서 처리됨
     }
 
     private void handleMergeFailed(MergeEventDTO event) {

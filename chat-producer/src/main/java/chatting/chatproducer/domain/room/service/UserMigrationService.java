@@ -76,13 +76,23 @@ public class UserMigrationService {
                 }
             }
 
-            // 5. 소스 방의 사용자들 삭제
-            // 병합 후 소스 방이 삭제되므로 사용자 정보도 함께 삭제
+            // 5. 소스 방의 모든 사용자들 삭제 (중복 여부와 관계없이)
+            // 병합 후 소스 방이 삭제되므로 모든 사용자 정보도 함께 삭제
             for (String sourceRoomId : sourceRoomIds) {
-                List<RoomUser> usersToDelete = roomUserRepository.findByRoomId(sourceRoomId);
-                roomUserRepository.deleteAll(usersToDelete);
-                log.info("소스 방 사용자 삭제 완료: mergeId={}, sourceRoomId={}, deletedCount={}", 
-                        mergeId, sourceRoomId, usersToDelete.size());
+                try {
+                    List<RoomUser> usersToDelete = roomUserRepository.findByRoomId(sourceRoomId);
+                    log.info("삭제할 사용자 조회: sourceRoomId={}, count={}", sourceRoomId, usersToDelete.size());
+                    
+                    if (!usersToDelete.isEmpty()) {
+                        roomUserRepository.deleteAll(usersToDelete);
+                        log.info("소스 방 사용자 삭제 성공: sourceRoomId={}, deletedCount={}", sourceRoomId, usersToDelete.size());
+                    } else {
+                        log.info("삭제할 사용자가 없음: sourceRoomId={}", sourceRoomId);
+                    }
+                } catch (Exception e) {
+                    log.error("소스 방 사용자 삭제 실패: sourceRoomId={}", sourceRoomId, e);
+                    throw new RuntimeException("소스 방 사용자 삭제 실패: " + sourceRoomId, e);
+                }
             }
 
             log.info("사용자 마이그레이션 완료: mergeId={}, migratedCount={}, totalSourceUsers={}", 
