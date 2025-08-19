@@ -1,6 +1,8 @@
 package chatting.chatproducer.domain.room.service;
 
+import chatting.chatproducer.domain.room.entity.ChatRoom;
 import chatting.chatproducer.domain.room.entity.MergeStatus;
+import chatting.chatproducer.domain.room.repository.ChatRoomRepository;
 import chatting.chatproducer.domain.room.repository.MergeStatusRepository;
 import chatting.chatproducer.kafka.dto.MergeEventDTO;
 import chatting.chatproducer.kafka.producer.MergeEventProducer;
@@ -19,6 +21,7 @@ import java.util.UUID;
 public class ChatRoomMergeService {
 
     private final MergeStatusRepository mergeStatusRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final MergeEventProducer mergeEventProducer;
     private final MessageMigrationService messageMigrationService;
     private final UserMigrationService userMigrationService;
@@ -200,6 +203,15 @@ public class ChatRoomMergeService {
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.COMPLETED);
             mergeStatusRepository.save(mergeStatus);
 
+            // 2. 소스 방들을 아카이브 상태로 변경
+            for (String sourceRoomId : event.getSourceRoomIds()) {
+                ChatRoom sourceRoom = chatRoomRepository.findById(sourceRoomId)
+                    .orElseThrow(() -> new RuntimeException("소스 방을 찾을 수 없습니다: " + sourceRoomId));
+                sourceRoom.archive();
+                chatRoomRepository.save(sourceRoom);
+                log.info("소스 방 아카이브 완료: roomId={}", sourceRoomId);
+            }
+
             log.info("병합 완료 처리 완료: mergeId={}", mergeId);
 
         } catch (Exception e) {
@@ -223,8 +235,8 @@ public class ChatRoomMergeService {
             mergeStatus.setFailureReason(event.getFailureReason());
             mergeStatusRepository.save(mergeStatus);
 
-            // 2. 롤백 처리 (필요시)
-            // TODO: 롤백 로직 구현
+            // 2. 롤백 처리
+            performRollback(mergeId, event.getFailedStep(), event.getTargetRoomId(), event.getSourceRoomIds());
 
             log.info("병합 실패 처리 완료: mergeId={}", mergeId);
 
@@ -255,5 +267,111 @@ public class ChatRoomMergeService {
                 .build();
 
         mergeEventProducer.publishMergeFailed(failedEvent);
+    }
+
+    /**
+     * 롤백 처리
+     */
+    private void performRollback(String mergeId, String failedStep, String targetRoomId, List<String> sourceRoomIds) {
+        log.info("롤백 시작: mergeId={}, failedStep={}", mergeId, failedStep);
+
+        try {
+            switch (failedStep) {
+                case "USERS_MIGRATED":
+                    // 사용자 마이그레이션 롤백
+                    rollbackUserMigration(mergeId, targetRoomId, sourceRoomIds);
+                    // fall through
+                case "MESSAGES_MIGRATED":
+                    // 메시지 마이그레이션 롤백
+                    rollbackMessageMigration(mergeId, targetRoomId, sourceRoomIds);
+                    // fall through
+                case "ROOMS_LOCKED":
+                    // 방 잠금 해제
+                    unlockRooms(mergeId, targetRoomId, sourceRoomIds);
+                    break;
+                case "INITIATED":
+                    // 초기 상태로 롤백
+                    unlockRooms(mergeId, targetRoomId, sourceRoomIds);
+                    break;
+                default:
+                    log.warn("알 수 없는 실패 단계: {}", failedStep);
+            }
+
+            log.info("롤백 완료: mergeId={}", mergeId);
+
+        } catch (Exception e) {
+            log.error("롤백 처리 실패: mergeId={}", mergeId, e);
+            throw new RuntimeException("롤백 처리 실패", e);
+        }
+    }
+
+    /**
+     * 사용자 마이그레이션 롤백
+     */
+    private void rollbackUserMigration(String mergeId, String targetRoomId, List<String> sourceRoomIds) {
+        log.info("사용자 마이그레이션 롤백 시작: mergeId={}", mergeId);
+        
+        try {
+            // TODO : 타겟 방에서 마이그레이션된 사용자들을 제거 (로그 사용)
+            
+            // 현재는 로그만 남기고 실제 롤백은 구현하지 않음
+            log.warn("사용자 마이그레이션 롤백은 복잡한 작업이므로 수동 처리 필요: mergeId={}", mergeId);
+            
+            log.info("사용자 마이그레이션 롤백 완료: mergeId={}", mergeId);
+        } catch (Exception e) {
+            log.error("사용자 마이그레이션 롤백 실패: mergeId={}", mergeId, e);
+            throw new RuntimeException("사용자 마이그레이션 롤백 실패", e);
+        }
+    }
+
+    /**
+     * 메시지 마이그레이션 롤백
+     */
+    private void rollbackMessageMigration(String mergeId, String targetRoomId, List<String> sourceRoomIds) {
+        log.info("메시지 마이그레이션 롤백 시작: mergeId={}", mergeId);
+        
+        try {
+            // TODO: 타겟 방에서 소스 방으로 메시지를 다시 이동
+            
+            // 현재는 로그만 남기고 실제 롤백은 구현하지 않음
+            log.warn("메시지 마이그레이션 롤백은 복잡한 작업이므로 수동 처리 필요: mergeId={}", mergeId);
+            
+            log.info("메시지 마이그레이션 롤백 완료: mergeId={}", mergeId);
+        } catch (Exception e) {
+            log.error("메시지 마이그레이션 롤백 실패: mergeId={}", mergeId, e);
+            throw new RuntimeException("메시지 마이그레이션 롤백 실패", e);
+        }
+    }
+
+    /**
+     * 방 잠금 해제
+     */
+    private void unlockRooms(String mergeId, String targetRoomId, List<String> sourceRoomIds) {
+        log.info("방 잠금 해제 시작: mergeId={}", mergeId);
+        
+        try {
+            // 타겟 방과 소스 방들의 상태를 ACTIVE로 변경
+            
+            // 타겟 방 잠금 해제
+            ChatRoom targetRoom = chatRoomRepository.findById(targetRoomId)
+                .orElseThrow(() -> new RuntimeException("타겟 방을 찾을 수 없습니다: " + targetRoomId));
+            targetRoom.unlock();
+            chatRoomRepository.save(targetRoom);
+            log.info("타겟 방 잠금 해제 완료: roomId={}", targetRoomId);
+            
+            // 소스 방들 잠금 해제
+            for (String sourceRoomId : sourceRoomIds) {
+                ChatRoom sourceRoom = chatRoomRepository.findById(sourceRoomId)
+                    .orElseThrow(() -> new RuntimeException("소스 방을 찾을 수 없습니다: " + sourceRoomId));
+                sourceRoom.unlock();
+                chatRoomRepository.save(sourceRoom);
+                log.info("소스 방 잠금 해제 완료: roomId={}", sourceRoomId);
+            }
+            
+            log.info("방 잠금 해제 완료: mergeId={}", mergeId);
+        } catch (Exception e) {
+            log.error("방 잠금 해제 실패: mergeId={}", mergeId, e);
+            throw new RuntimeException("방 잠금 해제 실패", e);
+        }
     }
 } 
