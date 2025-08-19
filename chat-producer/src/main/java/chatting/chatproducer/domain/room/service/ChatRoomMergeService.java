@@ -84,6 +84,15 @@ public class ChatRoomMergeService {
 
             log.info("방 잠금 완료: mergeId={}", mergeId);
 
+            // 3. 방 잠금 완료 이벤트 발행
+            MergeEventDTO roomlockedEvent = MergeEventDTO.builder()
+                    .mergeId(mergeId)
+                    .targetRoomId(event.getTargetRoomId())
+                    .sourceRoomIds(event.getSourceRoomIds())
+                    .build();
+
+            mergeEventProducer.publishRoomsLocked(roomlockedEvent);
+
             log.info("=== 방 잠금 처리 완료 ===");
 
         } catch (Exception e) {

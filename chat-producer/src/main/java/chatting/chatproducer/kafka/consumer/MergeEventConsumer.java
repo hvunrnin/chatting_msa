@@ -28,7 +28,7 @@ public class MergeEventConsumer {
 
     @KafkaListener(
             topics = "merge-events",
-            groupId = "merge-event-consumer-group-v2",
+            groupId = "merge-event-consumer-group",
             containerFactory = "mergeEventKafkaListenerContainerFactory"
     )
     public void consumeMergeEvent(MergeEventDTO event) {
