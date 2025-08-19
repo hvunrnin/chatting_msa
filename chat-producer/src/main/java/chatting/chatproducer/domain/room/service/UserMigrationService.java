@@ -98,16 +98,6 @@ public class UserMigrationService {
             log.info("사용자 마이그레이션 완료: mergeId={}, migratedCount={}, totalSourceUsers={}", 
                     mergeId, migratedCount, sourceRoomUsers.size());
 
-            // 6. 마이그레이션 완료 이벤트 발행
-            MergeEventDTO event = MergeEventDTO.builder()
-                    .mergeId(mergeId)
-                    .targetRoomId(targetRoomId)
-                    .sourceRoomIds(sourceRoomIds)
-                    .migratedUserCount(migratedCount)
-                    .build();
-
-            mergeEventProducer.publishUsersMigrated(event);
-
         } catch (Exception e) {
             log.error("사용자 마이그레이션 실패: mergeId={}, targetRoomId={}", mergeId, targetRoomId, e);
             throw new RuntimeException("사용자 마이그레이션 실패", e);

@@ -49,16 +49,6 @@ public class MessageMigrationService {
             log.info("메시지 마이그레이션 완료: mergeId={}, updatedCount={}, totalMessages={}", 
                     mergeId, result.getModifiedCount(), totalMigratedMessages);
 
-            // 3. 마이그레이션 완료 이벤트 발행
-            MergeEventDTO event = MergeEventDTO.builder()
-                    .mergeId(mergeId)
-                    .targetRoomId(targetRoomId)
-                    .sourceRoomIds(sourceRoomIds)
-                    .migratedMessageCount((int) result.getModifiedCount())
-                    .build();
-
-            mergeEventProducer.publishMessagesMigrated(event);
-
         } catch (Exception e) {
             log.error("메시지 마이그레이션 실패: mergeId={}, targetRoomId={}", mergeId, targetRoomId, e);
             throw new RuntimeException("메시지 마이그레이션 실패", e);

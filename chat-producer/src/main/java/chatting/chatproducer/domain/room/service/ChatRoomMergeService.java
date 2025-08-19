@@ -82,6 +82,8 @@ public class ChatRoomMergeService {
             mergeStatusRepository.flush(); // 즉시 DB에 반영
             log.info("방 잠금 상태 업데이트 완료: mergeId={}", mergeId);
 
+            log.info("방 잠금 완료: mergeId={}", mergeId);
+
             log.info("=== 방 잠금 처리 완료 ===");
 
         } catch (Exception e) {
@@ -92,25 +94,40 @@ public class ChatRoomMergeService {
     }
 
     /**
-     * 메시지 마이그레이션 완료 처리
+     * 메시지 마이그레이션 시작 처리
      */
     @Transactional
     public void handleMessagesMigrate(MergeEventDTO event) {
         String mergeId = event.getMergeId();
+        log.info("=== 메시지 마이그레이션 시작 ===");
+        log.info("메시지 마이그레이션 시작: mergeId={}", mergeId);
 
         try {
-            // 1. 메시지 마이그레이션 시작
-            log.info("메시지 마이그레이션 시작...");
-            messageMigrationService.migrateMessages(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
-            log.info("메시지 마이그레이션 완료");
-
-            // 2. 병합 상태 업데이트
+            // 1. 병합 상태 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.MESSAGES_MIGRATED);
             mergeStatusRepository.save(mergeStatus);
+            log.info("메시지 마이그레이션 상태 업데이트 완료: mergeId={}", mergeId);
+
+            // 2. 메시지 마이그레이션 실행
+            messageMigrationService.migrateMessages(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
+            log.info("메시지 마이그레이션 완료: mergeId={}", mergeId);
+
+            // 3. 메시지 마이그레이션 완료 이벤트 발행
+            MergeEventDTO messagesMigratedEvent = MergeEventDTO.builder()
+                    .mergeId(mergeId)
+                    .targetRoomId(event.getTargetRoomId())
+                    .sourceRoomIds(event.getSourceRoomIds())
+                    .build();
+            
+            mergeEventProducer.publishMessagesMigrated(messagesMigratedEvent);
+            log.info("메시지 마이그레이션 완료 이벤트 발행: mergeId={}", mergeId);
+
+            log.info("=== 메시지 마이그레이션 완료 ===");
 
         } catch (Exception e) {
-            log.error("메시지 마이그레이션 완료 처리 실패: mergeId={}", mergeId, e);
+            log.error("=== 메시지 마이그레이션 실패 ===");
+            log.error("메시지 마이그레이션 실패: mergeId={}", mergeId, e);
             publishMergeFailedEvent(mergeId, event.getTargetRoomId(), event.getSourceRoomIds(), "MESSAGES_MIGRATED", e.getMessage());
         }
     }
@@ -121,35 +138,39 @@ public class ChatRoomMergeService {
     @Transactional
     public void handleUsersMigrate(MergeEventDTO event) {
         String mergeId = event.getMergeId();
+        log.info("=== 사용자 마이그레이션 시작 ===");
+        log.info("사용자 마이그레이션 시작: mergeId={}", mergeId);
 
         try {
-            // 1. 사용자 마이그레이션 시작
-            log.info("사용자 마이그레이션 시작...");
-            userMigrationService.migrateUsers(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
-            log.info("사용자 마이그레이션 완료");
-
-            // 2. 병합 상태 업데이트
+            // 1. 병합 상태 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setCurrentStep(MergeStatus.MergeStep.USERS_MIGRATED);
             mergeStatusRepository.save(mergeStatus);
-            log.info("tlqkf 들어가냐?");
+            log.info("사용자 마이그레이션 상태 업데이트 완료: mergeId={}", mergeId);
 
-            // 3. 최종 검증 및 완료
+            // 2. 사용자 마이그레이션 실행
+            userMigrationService.migrateUsers(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
+            log.info("사용자 마이그레이션 완료: mergeId={}", mergeId);
+
+            // 3. 최종 검증
             mergeValidationService.validateMerge(mergeId, event.getTargetRoomId(), event.getSourceRoomIds());
 
-            // 3. 병합 완료 이벤트 발행
-            MergeEventDTO completedEvent = MergeEventDTO.builder()
+            // 4. 사용자 마이그레이션 완료 이벤트 발행
+            MergeEventDTO usersMigratedEvent = MergeEventDTO.builder()
                     .mergeId(mergeId)
                     .targetRoomId(event.getTargetRoomId())
                     .sourceRoomIds(event.getSourceRoomIds())
                     .totalMigratedMessages(event.getMigratedMessageCount())
-                    .totalMigratedUsers(event.getMigratedUserCount())
                     .build();
+            
+            mergeEventProducer.publishUsersMigrated(usersMigratedEvent);
+            log.info("사용자 마이그레이션 완료 이벤트 발행: mergeId={}", mergeId);
 
-            mergeEventProducer.publishMergeCompleted(completedEvent);
+            log.info("=== 사용자 마이그레이션 완료 ===");
 
         } catch (Exception e) {
-            log.error("사용자 마이그레이션 완료 처리 실패: mergeId={}", mergeId, e);
+            log.error("=== 사용자 마이그레이션 실패 ===");
+            log.error("사용자 마이그레이션 실패: mergeId={}", mergeId, e);
             publishMergeFailedEvent(mergeId, event.getTargetRoomId(), event.getSourceRoomIds(), "USERS_MIGRATED", e.getMessage());
         }
     }
@@ -167,7 +188,7 @@ public class ChatRoomMergeService {
             // 1. 병합 상태 완료로 업데이트
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setStatus("COMPLETED");
-            //mergeStatus.setCompletedAt(LocalDateTime.now());
+            mergeStatus.setCurrentStep(MergeStatus.MergeStep.COMPLETED);
             mergeStatusRepository.save(mergeStatus);
 
             log.info("병합 완료 처리 완료: mergeId={}", mergeId);
@@ -191,7 +212,6 @@ public class ChatRoomMergeService {
             MergeStatus mergeStatus = getMergeStatus(mergeId);
             mergeStatus.setStatus("FAILED");
             mergeStatus.setFailureReason(event.getFailureReason());
-            //mergeStatus.setCompletedAt(LocalDateTime.now());
             mergeStatusRepository.save(mergeStatus);
 
             // 2. 롤백 처리 (필요시)
