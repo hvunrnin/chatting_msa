@@ -43,7 +43,6 @@ public class MergeEventConsumer {
                     handleMergeInitiated(event);
                     break;
                 case "ROOMS_LOCKED":
-                    log.info("여긴?????");
                     handleRoomsLocked(event);
                     break;
                 case "MESSAGES_MIGRATED":

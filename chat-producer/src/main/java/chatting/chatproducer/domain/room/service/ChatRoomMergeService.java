@@ -1,13 +1,21 @@
 package chatting.chatproducer.domain.room.service;
 
+import chatting.chatproducer.domain.chatmessage.document.ChatMessageDocument;
+import chatting.chatproducer.domain.chatmessage.repository.ChatMessageMongoRepository;
 import chatting.chatproducer.domain.room.entity.ChatRoom;
 import chatting.chatproducer.domain.room.entity.MergeStatus;
+import chatting.chatproducer.domain.room.entity.MessageMigrationLog;
 import chatting.chatproducer.domain.room.entity.RoomUser;
 import chatting.chatproducer.domain.room.entity.UserMigrationLog;
 import chatting.chatproducer.domain.room.repository.ChatRoomRepository;
 import chatting.chatproducer.domain.room.repository.MergeStatusRepository;
+import chatting.chatproducer.domain.room.repository.MessageMigrationLogRepository;
 import chatting.chatproducer.domain.room.repository.RoomUserRepository;
 import chatting.chatproducer.domain.room.repository.UserMigrationLogRepository;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import chatting.chatproducer.kafka.dto.MergeEventDTO;
 import chatting.chatproducer.kafka.producer.MergeEventProducer;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +37,9 @@ public class ChatRoomMergeService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomUserRepository roomUserRepository;
     private final UserMigrationLogRepository userMigrationLogRepository;
+    private final MessageMigrationLogRepository messageMigrationLogRepository;
+    private final ChatMessageMongoRepository chatMessageMongoRepository;
+    private final MongoTemplate mongoTemplate;
     private final MergeEventProducer mergeEventProducer;
     private final MessageMigrationService messageMigrationService;
     private final UserMigrationService userMigrationService;
@@ -306,7 +317,7 @@ public class ChatRoomMergeService {
                     // fall through
                 case "MESSAGES_MIGRATED":
                     // 메시지 마이그레이션 롤백
-                    rollbackMessageMigration(mergeId, targetRoomId, sourceRoomIds);
+                    rollbackMessageMigration(mergeId);
                     // fall through
                 case "ROOMS_LOCKED":
                     // 방 잠금 해제
@@ -405,23 +416,59 @@ public class ChatRoomMergeService {
         log.info("사용자 마이그레이션 롤백 완료: mergeId={}, rollbackCount={}", mergeId, rollbackCount);
     }
 
-    /**
-     * 메시지 마이그레이션 롤백
+        /**
+     * 메시지 마이그레이션 롤백 (업데이트 방식)
      */
-    private void rollbackMessageMigration(String mergeId, String targetRoomId, List<String> sourceRoomIds) {
+    @Transactional
+    public void rollbackMessageMigration(String mergeId) {
         log.info("메시지 마이그레이션 롤백 시작: mergeId={}", mergeId);
-        
-        try {
-            // TODO: 타겟 방에서 소스 방으로 메시지를 다시 이동
-            
-            // 현재는 로그만 남기고 실제 롤백은 구현하지 않음
-            log.warn("메시지 마이그레이션 롤백은 복잡한 작업이므로 수동 처리 필요: mergeId={}", mergeId);
-            
-            log.info("메시지 마이그레이션 롤백 완료: mergeId={}", mergeId);
-        } catch (Exception e) {
-            log.error("메시지 마이그레이션 롤백 실패: mergeId={}", mergeId, e);
-            throw new RuntimeException("메시지 마이그레이션 롤백 실패", e);
+        int page = 0, rollbackCount = 0;
+
+        while (true) {
+            List<MessageMigrationLog> logs = messageMigrationLogRepository.findByMergeIdAndStatus(
+                mergeId, MessageMigrationLog.MigrationStatus.MIGRATED, PageRequest.of(page++, 1000));
+            if (logs.isEmpty()) break;
+
+            log.debug("페이징 처리: mergeId={}, page={}, logCount={}", mergeId, page-1, logs.size());
+
+            for (MessageMigrationLog logRow : logs) {
+                try {
+                    if (logRow.isRolledBack()) continue; // 멱등
+
+                    // 원래 타겟에 있던 문서는 이동 안 했으니 noop
+                    if (logRow.isWasInTarget()) {
+                        logRow.markAsRolledBack();
+                        messageMigrationLogRepository.save(logRow);
+                        continue;
+                    }
+
+                    // 진짜 이동했던 건: roomId를 source로 되돌린다
+                    Query query = new Query(Criteria.where("_id").is(logRow.getMessageId())
+                                                  .and("roomId").is(logRow.getTargetRoomId()));
+                    Update update = new Update().set("roomId", logRow.getSourceRoomId());
+
+                    var result = mongoTemplate.updateFirst(query, update, ChatMessageDocument.class);
+                    if (result.getModifiedCount() > 0) {
+                        rollbackCount++;
+                        log.debug("메시지 롤백(이동 복원): messageId={}, {} -> {}",
+                                  logRow.getMessageId(), logRow.getTargetRoomId(), logRow.getSourceRoomId());
+                    } else {
+                        // 멱등/경합 케이스: 이미 복원됐거나 위치가 다름
+                        log.debug("롤백 스킵/멱등: messageId={}, expected roomId={}, current 다름",
+                                  logRow.getMessageId(), logRow.getTargetRoomId());
+                    }
+
+                    logRow.markAsRolledBack();
+                    messageMigrationLogRepository.save(logRow);
+
+                } catch (Exception ex) {
+                    log.error("개별 메시지 롤백 실패: mergeId={}, messageId={}",
+                              mergeId, logRow.getMessageId(), ex);
+                }
+            }
         }
+        
+        log.info("메시지 마이그레이션 롤백 완료: mergeId={}, rollbackCount={}", mergeId, rollbackCount);
     }
 
     /**
