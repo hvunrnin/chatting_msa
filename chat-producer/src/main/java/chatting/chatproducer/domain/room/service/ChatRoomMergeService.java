@@ -2,12 +2,17 @@ package chatting.chatproducer.domain.room.service;
 
 import chatting.chatproducer.domain.room.entity.ChatRoom;
 import chatting.chatproducer.domain.room.entity.MergeStatus;
+import chatting.chatproducer.domain.room.entity.RoomUser;
+import chatting.chatproducer.domain.room.entity.UserMigrationLog;
 import chatting.chatproducer.domain.room.repository.ChatRoomRepository;
 import chatting.chatproducer.domain.room.repository.MergeStatusRepository;
+import chatting.chatproducer.domain.room.repository.RoomUserRepository;
+import chatting.chatproducer.domain.room.repository.UserMigrationLogRepository;
 import chatting.chatproducer.kafka.dto.MergeEventDTO;
 import chatting.chatproducer.kafka.producer.MergeEventProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +27,8 @@ public class ChatRoomMergeService {
 
     private final MergeStatusRepository mergeStatusRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final RoomUserRepository roomUserRepository;
+    private final UserMigrationLogRepository userMigrationLogRepository;
     private final MergeEventProducer mergeEventProducer;
     private final MessageMigrationService messageMigrationService;
     private final UserMigrationService userMigrationService;
@@ -270,6 +277,22 @@ public class ChatRoomMergeService {
     }
 
     /**
+     * 파싱 유틸 메서드
+     */
+    private java.util.Optional<RoomUser.UserRole> safeParseRole(String roleString) {
+        if (roleString == null || roleString.trim().isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        
+        try {
+            return java.util.Optional.of(RoomUser.UserRole.valueOf(roleString.trim().toUpperCase()));
+        } catch (IllegalArgumentException e) {
+            log.warn("잘못된 역할 문자열: {}", roleString);
+            return java.util.Optional.empty();
+        }
+    }
+
+    /**
      * 롤백 처리
      */
     private void performRollback(String mergeId, String failedStep, String targetRoomId, List<String> sourceRoomIds) {
@@ -279,7 +302,7 @@ public class ChatRoomMergeService {
             switch (failedStep) {
                 case "USERS_MIGRATED":
                     // 사용자 마이그레이션 롤백
-                    rollbackUserMigration(mergeId, targetRoomId, sourceRoomIds);
+                    rollbackUserMigration(mergeId);
                     // fall through
                 case "MESSAGES_MIGRATED":
                     // 메시지 마이그레이션 롤백
@@ -308,20 +331,78 @@ public class ChatRoomMergeService {
     /**
      * 사용자 마이그레이션 롤백
      */
-    private void rollbackUserMigration(String mergeId, String targetRoomId, List<String> sourceRoomIds) {
+    @Transactional
+    public void rollbackUserMigration(String mergeId) {
         log.info("사용자 마이그레이션 롤백 시작: mergeId={}", mergeId);
-        
-        try {
-            // TODO : 타겟 방에서 마이그레이션된 사용자들을 제거 (로그 사용)
-            
-            // 현재는 로그만 남기고 실제 롤백은 구현하지 않음
-            log.warn("사용자 마이그레이션 롤백은 복잡한 작업이므로 수동 처리 필요: mergeId={}", mergeId);
-            
-            log.info("사용자 마이그레이션 롤백 완료: mergeId={}", mergeId);
-        } catch (Exception e) {
-            log.error("사용자 마이그레이션 롤백 실패: mergeId={}", mergeId, e);
-            throw new RuntimeException("사용자 마이그레이션 롤백 실패", e);
+        int page = 0, rollbackCount = 0;
+
+        while (true) {
+            List<UserMigrationLog> logs = userMigrationLogRepository.findByMergeIdAndStatus(
+                mergeId, UserMigrationLog.MigrationStatus.MIGRATED, PageRequest.of(page++, 1000));
+            if (logs.isEmpty()) break;
+
+            log.debug("페이징 처리: mergeId={}, page={}, logCount={}", mergeId, page-1, logs.size());
+
+            for (UserMigrationLog logRow : logs) {
+                try {
+                    if (logRow.isRolledBack()) continue; // 멱등
+
+                    // 타겟 처리
+                    boolean inTarget = roomUserRepository
+                        .existsByRoomIdAndUserId(logRow.getTargetRoomId(), logRow.getUserId());
+
+                    if (!logRow.isWasMemberInTo()) {
+                        // 정방향에서 타겟에 "새로 추가"되었던 사용자 → 제거(멱등)
+                        if (inTarget) {
+                            roomUserRepository.deleteByRoomIdAndUserId(logRow.getTargetRoomId(), logRow.getUserId());
+                            log.debug("타겟에서 사용자 제거: userId={}, targetRoomId={}", 
+                                    logRow.getUserId(), logRow.getTargetRoomId());
+                        }
+                    } else if (logRow.getPrevRoleInTo() != null && inTarget) {
+                        roomUserRepository.updateRole(
+                            logRow.getUserId(), logRow.getTargetRoomId(), logRow.getPrevRoleInTo());
+                        log.debug("타겟 사용자 역할 복원: userId={}, targetRoomId={}, prevRole={}", 
+                                logRow.getUserId(), logRow.getTargetRoomId(), logRow.getPrevRoleInTo());
+                    }
+
+                    // 소스 복구
+                    if (logRow.isWasMemberInFrom()) {
+                        boolean inSource = roomUserRepository
+                            .existsByRoomIdAndUserId(logRow.getSourceRoomId(), logRow.getUserId());
+
+                        if (!inSource) {
+                            var role = safeParseRole(logRow.getPrevRoleInFrom())
+                                      .orElse(RoomUser.UserRole.MEMBER);
+                            RoomUser sourceUser = RoomUser.builder()
+                                    .roomId(logRow.getSourceRoomId())
+                                    .userId(logRow.getUserId())
+                                    .joinedAt(LocalDateTime.now())
+                                    .role(role)
+                                    .build();
+                            roomUserRepository.save(sourceUser);
+                            log.debug("소스 방에 사용자 복원: userId={}, sourceRoomId={}, role={}", 
+                                    logRow.getUserId(), logRow.getSourceRoomId(), role.name());
+                        } else if (logRow.getPrevRoleInFrom() != null) {
+                            roomUserRepository.updateRole(
+                                logRow.getUserId(), logRow.getSourceRoomId(), logRow.getPrevRoleInFrom());
+                            log.debug("소스 사용자 역할 복원: userId={}, sourceRoomId={}, prevRole={}", 
+                                    logRow.getUserId(), logRow.getSourceRoomId(), logRow.getPrevRoleInFrom());
+                        }
+                    }
+
+                    logRow.markAsRolledBack();
+                    userMigrationLogRepository.save(logRow);
+                    rollbackCount++;
+
+                } catch (Exception ex) {
+                    log.error("개별 사용자 롤백 실패: mergeId={}, userId={}",
+                              mergeId, logRow.getUserId(), ex);
+                    // 재시도 테이블/알림 등 후속 처리 권장
+                }
+            }
         }
+
+        log.info("사용자 마이그레이션 롤백 완료: mergeId={}, rollbackCount={}", mergeId, rollbackCount);
     }
 
     /**
