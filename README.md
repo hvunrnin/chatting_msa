@@ -200,7 +200,7 @@ stateDiagram-v2
     [*] --> ACTIVE: 방 생성
     ACTIVE --> MERGING: 병합 시작
     MERGING --> ACTIVE: 롤백 시
-    MERGING --> ARCHIVED: 병합 완료 (소스 방)
+    MERGING --> ACTIVE: 병합 완료 (타겟 방)
     ACTIVE --> ARCHIVED: 병합 완료 (소스 방)
     
     note right of MERGING
