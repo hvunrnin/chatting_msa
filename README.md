@@ -1,4 +1,61 @@
-![chatting_flow](https://github.com/user-attachments/assets/3f568a7a-3ea1-487b-a799-558a5433d6eb)
+# 프로젝트 아키텍처 개요
+
+## 채팅 메시지 플로우 (Outbox 기반 시퀀스)
+
+```mermaid
+sequenceDiagram
+    participant User as 사용자
+    participant N as Nginx
+    participant P as chat-producer
+    participant PO as Producer Outbox
+    participant PP as Outbox Publisher
+    participant K as Kafka
+    participant C as chat-consumer
+    participant CO as Consumer Outbox
+    participant CP as Consumer Outbox Publisher
+    participant MDB as MongoDB
+
+    User->>N: WebSocket 연결/메시지 전송
+    N->>P: WS 프록시
+    P->>PO: 트랜잭션 내 도메인 검증/처리 + Outbox INSERT
+    PP->>PO: PENDING 이벤트 폴링
+    PP->>K: chat-messages publish (key = eventId)
+    Note over PP: 성공 시 Outbox= SENT
+
+    K->>C: chat-messages consume
+    C->>MDB: 메시지 저장 (roomId 업데이트/삽입)
+    C->>CO: Outbox INSERT (send-msg ack)
+    CP->>CO: PENDING ack 폴링
+    CP->>K: send-msg publish (ack)
+    Note over CP: 성공 시 Outbox= SENT
+
+    K->>P: send-msg consume
+    P->>User: WS로 전송 완료 알림
+```
+
+## 병합 이벤트 플로우
+
+```mermaid
+flowchart TD
+    A["병합 트랜잭션<br/>(상태/검증/DB 반영)"] --> B["Producer Outbox INSERT<br/>(eventType=MERGE_*)"]
+    B --> C[Outbox Publisher]
+    C --> D[Kafka topic: merge-events]
+    D --> E["Producer 내부 Consumer<br/>(or 별도 서비스)"]
+    E --> F["단계별 처리<br/>ROOMS_LOCKED → MSGS → USERS"]
+    F --> G["추가 Outbox INSERT<br/>다음 단계 이벤트"]
+    G --> C
+```
+
+## Outbox 설계 메모
+- Outbox 키: `eventId(UUID)`를 Kafka key로 사용해 멱등 보장
+- 컬럼 예시: id, aggregateType, aggregateId, eventType, payload(JSON), status(PENDING|SENT|FAILED), createdAt, sentAt, version
+- 퍼블리셔: 페이지네이션(예: 1000개) + 백오프 재시도
+- 트랜잭션 경계: 도메인 변경과 Outbox INSERT는 동일 트랜잭션
+- Consumer 측 ack 또한 Outbox로 구성(선택)하여 재시도/멱등 강화 
+
+<br>
+<br>
+
 # 채팅방 병합 Saga 패턴 이벤트 흐름
 
 ## 전체 병합 프로세스 흐름
@@ -188,4 +245,87 @@ flowchart TD
     G --> H[실제 마이그레이션]
     H --> I[페이지 증가]
     I --> C
+```
+
+<br>
+<br>
+
+# 전체 서비스 토폴로지
+
+```mermaid
+flowchart LR
+
+  subgraph Client["Client (Browser)"]
+    U[사용자]
+    WS[WebSocket/STOMP]
+  end
+
+  subgraph Nginx["Nginx (Load Balancer)"]
+  end
+
+  subgraph Producer["chat-producer (Spring Boot)"]
+    P_WS[WebSocket Endpoints]
+    P_API[REST APIs]
+    P_REDIS[(Redis)]
+    P_MYSQL[(MySQL<br/>Rooms, Users, MergeStatus, Outbox)]
+    P_MONGO_REPO[(Mongo Repository)]
+
+    P_OUTBOX[(Outbox Event Table)]
+    P_OBPUB["Outbox Publisher\n(Scheduler/Batch)"]
+
+    P_KC["Kafka Consumers\nsend-msg(ack), merge-events"]
+  end
+
+  subgraph Kafka[Kafka]
+    K_CHAT[topic: chat-messages]
+    K_ACK[topic: send-msg]
+    K_MERGE[topic: merge-events]
+  end
+
+  subgraph Consumer["chat-consumer (Spring Boot)"]
+    S_KC["Kafka Consumer\nchat-messages"]
+    S_MONGO_WRITE[Mongo Writer]
+
+    S_OUTBOX[(Outbox Event Table)]
+    S_OBPUB["Outbox Publisher\n(Scheduler/Batch)"]
+  end
+
+  subgraph Datastores[Datastores]
+    MONGO[(MongoDB\nchat_messages_ind)]
+    MYSQL[(MySQL RDBMS)]
+  end
+
+  %% Client ingress
+  U --> WS --> Nginx --> Producer
+
+  %% Producer internal state
+  Producer -->|세션/캐시| P_REDIS
+  Producer -->|JPA| P_MYSQL
+  P_MYSQL --- MYSQL
+  P_MONGO_REPO --- MONGO
+
+  %% Producer Outbox write (chat message & merge events)
+  Producer -->|도메인 변경 + Outbox INSERT| P_OUTBOX
+  P_OBPUB -->|PENDING 이벤트 폴링| P_OUTBOX
+  P_OBPUB -->|publish chat| K_CHAT
+  P_OBPUB -->|publish merge| K_MERGE
+
+  %% Consumer: chat-messages consume -> Mongo 저장 -> ack Outbox
+  K_CHAT --> S_KC
+  S_KC --> S_MONGO_WRITE --> MONGO
+  S_KC -->|ack Outbox INSERT| S_OUTBOX
+  S_OBPUB -->|PENDING ack 폴링| S_OUTBOX
+  S_OBPUB -->|publish ack| K_ACK
+
+  %% ack 소비 후 사용자 통지
+  K_ACK --> Producer
+  Producer --> P_KC
+  P_KC -->|WS push| P_WS --> WS --> U
+
+  %% Merge saga (관리 상태 업데이트)
+  Producer -->|상태 업데이트| MYSQL
+  Producer -->|메시지/사용자 이동| MONGO
+
+  %% Admin/REST
+  U -->|HTTP| Nginx --> P_API
 ```
